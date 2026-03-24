@@ -1,41 +1,83 @@
-const express = require('express');
-const app = express();
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-app.use(express.json());
+let isDrawing = false;
 
-let dataStore = {};
+// Golden scratch layer
+const gradient = ctx.createLinearGradient(0, 0, 300, 160);
+gradient.addColorStop(0, "#facc15");
+gradient.addColorStop(1, "#eab308");
 
-function getReward() {
-  const rand = Math.random();
-  if (rand < 0.5) return 0;
-  if (rand < 0.75) return 1;
-  if (rand < 0.85) return 2;
-  if (rand < 0.95) return 5;
-  return 9;
-}
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-function generateCode() {
-  return 'DF' + Math.random().toString(36).substr(2, 6).toUpperCase();
-}
+canvas.addEventListener("mousedown", () => isDrawing = true);
+canvas.addEventListener("mouseup", () => isDrawing = false);
 
-app.post('/scratch', (req, res) => {
-  const { userId } = req.body;
-  const today = new Date().toDateString();
+canvas.addEventListener("mousemove", (e) => {
+  if (!isDrawing) return;
 
-  if (!userId) {
-    return res.json({ error: "Enter mobile number" });
-  }
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
 
-  if (dataStore[userId] === today) {
-    return res.json({ reward: 0, code: "ALREADY_USED" });
-  }
-
-  const reward = getReward();
-  const code = generateCode();
-
-  dataStore[userId] = today;
-
-  res.json({ reward, code });
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.beginPath();
+  ctx.arc(x, y, 18, 0, Math.PI * 2);
+  ctx.fill();
 });
 
-app.listen(3000, () => console.log("Server running"));
+let revealed = false;
+
+canvas.addEventListener("mouseup", async () => {
+  if (revealed) return;
+
+  const userId = document.getElementById("userId").value;
+
+  if (!userId) {
+    alert("Enter mobile number");
+    return;
+  }
+
+  const res = await fetch("https://backend-scratch.onrender.com/scratch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("rewardText").innerHTML =
+    `🎉 ₹${data.reward}`;
+
+  document.getElementById("result").innerHTML =
+    `Code: ${data.code}`;
+
+  revealed = true;
+
+  // Card animation
+  document.getElementById("card").style.transform = "scale(1.05)";
+
+  // Confetti 🎉
+  for (let i = 0; i < 80; i++) {
+    let confetti = document.createElement("div");
+    confetti.style.position = "fixed";
+    confetti.style.width = "6px";
+    confetti.style.height = "6px";
+    confetti.style.background = "yellow";
+    confetti.style.top = "0";
+    confetti.style.left = Math.random() * window.innerWidth + "px";
+    confetti.style.opacity = Math.random();
+
+    document.body.appendChild(confetti);
+
+    let fall = setInterval(() => {
+      confetti.style.top = parseInt(confetti.style.top) + 5 + "px";
+    }, 20);
+
+    setTimeout(() => {
+      clearInterval(fall);
+      confetti.remove();
+    }, 2000);
+  }
+});
